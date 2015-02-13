@@ -1,3 +1,5 @@
+*This is VERY MUCH a work-in-progress right now.*
+
 # Overview #
 
 `anompipe` implements anomaly detection based on the S-H-ESD algorithm as a UNIX
