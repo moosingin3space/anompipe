@@ -5,7 +5,7 @@ utility - simple, composable, reusable.
 
 `anompipe` takes tab-delimited text as an input. The first column is always
 the timestamp, formatted in anything readable by 
-(python-dateutil)[https://labix.org/python-dateutil].
+[python-dateutil](https://labix.org/python-dateutil).
 
     2015-02-13T14:50:56-0500    47
     2015-02-13T14:51:04-0500    89
