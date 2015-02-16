@@ -269,51 +269,51 @@ AnomalyDetectionTs <- function(x, max_anoms = 0.10, alpha = 0.05,
     all_anoms <- data.frame(timestamp=numeric(0), count=numeric(0))
     seasonal_plus_trend <- data.frame(timestamp=numeric(0), count=numeric(0))
 
+    anoms <- data.frame(timestamp=numeric(0), count=numeric(0))
+
     # Detect anomalies on all data (either entire data in one-pass, or in 2 week blocks if longterm=TRUE)
-    for(direction in c("pos", "neg")) {
-        for(i in 1:length(all_data)) {
+    direction <- "both"
+    for(i in 1:length(all_data)) {
 
-            anomaly_direction = switch(direction,
-                                       "pos" = data.frame(one_tail=TRUE, upper_tail=TRUE), # upper-tail only (positive going anomalies)
-                                       "neg" = data.frame(one_tail=TRUE, upper_tail=FALSE), # lower-tail only (negative going anomalies)
-                                       "both" = data.frame(one_tail=FALSE, upper_tail=TRUE)) # Both tails. Tail direction is not actually used.
+        anomaly_direction = switch(direction,
+                                   "pos" = data.frame(one_tail=TRUE, upper_tail=TRUE), # upper-tail only (positive going anomalies)
+                                   "neg" = data.frame(one_tail=TRUE, upper_tail=FALSE), # lower-tail only (negative going anomalies)
+                                   "both" = data.frame(one_tail=FALSE, upper_tail=TRUE)) # Both tails. Tail direction is not actually used.
 
-            # detect_anoms actually performs the anomaly detection and returns the results in a list containing the anomalies
-            # as well as the decomposed components of the time series for further analysis.
-            s_h_esd_timestamps <- detect_anoms(all_data[[i]], k=max_anoms, alpha=alpha, num_obs_per_period=period, use_decomp=TRUE, use_esd=FALSE, 
-                                               one_tail=anomaly_direction$one_tail, upper_tail=anomaly_direction$upper_tail, verbose=FALSE) 
+        # detect_anoms actually performs the anomaly detection and returns the results in a list containing the anomalies
+        # as well as the decomposed components of the time series for further analysis.
+        s_h_esd_timestamps <- detect_anoms(all_data[[i]], k=max_anoms, alpha=alpha, num_obs_per_period=period, use_decomp=TRUE, use_esd=FALSE, 
+                                           one_tail=anomaly_direction$one_tail, upper_tail=anomaly_direction$upper_tail, verbose=FALSE) 
 
-            # store decomposed components in local variable and overwrite s_h_esd_timestamps to contain only the anom timestamps 
-            data_decomp <- s_h_esd_timestamps$stl
-            #s_h_esd_timestamps <- s_h_esd_timestamps$anoms
+        # store decomposed components in local variable and overwrite s_h_esd_timestamps to contain only the anom timestamps 
+        data_decomp <- s_h_esd_timestamps$stl
+        s_h_esd_timestamps <- s_h_esd_timestamps$anoms
 
-            # -- Step 3: Use detected anomaly timestamps to extract the actual anomalies (timestamp and value) from the data
-            if(length(s_h_esd_timestamps) > 0){
-                #anoms <- subset(all_data[[i]], (all_data[[i]][[1]] %in% s_h_esd_timestamps))
-                anoms <- all_data[[i]]
-            } else {
-                anoms <- data.frame(timestamp=numeric(0), count=numeric(0))
-            }
-
-            # Filter the anomalies using one of the thresholding functions if applicable
-            if(threshold != "None"){
-                # Calculate daily max values
-                periodic_maxs <- tapply(x[[2]],as.Date(x[[1]]),FUN=max)     
-
-                # Calculate the threshold set by the user
-                if(threshold == 'med_max'){
-                    thresh <- median(periodic_maxs)
-                }else if (threshold == 'p95'){
-                    thresh <- quantile(periodic_maxs, .95)
-                }else if (threshold == 'p99'){
-                    thresh <- quantile(periodic_maxs, .99)
-                }
-                # Remove any anoms below the threshold
-                anoms <- subset(anoms, anoms[[2]] >= thresh)
-            }
-            all_anoms <- rbind(all_anoms, anoms)
-            seasonal_plus_trend <- rbind(seasonal_plus_trend, data_decomp)
+        # -- Step 3: Use detected anomaly timestamps to extract the actual anomalies (timestamp and value) from the data
+        if(length(s_h_esd_timestamps) > 0){
+            anoms <- subset(all_data[[i]], (all_data[[i]][[1]] %in% s_h_esd_timestamps))
+        } else {
+            anoms <- data.frame(timestamp=numeric(0), count=numeric(0))
         }
+
+        # Filter the anomalies using one of the thresholding functions if applicable
+        if(threshold != "None"){
+            # Calculate daily max values
+            periodic_maxs <- tapply(x[[2]],as.Date(x[[1]]),FUN=max)     
+
+            # Calculate the threshold set by the user
+            if(threshold == 'med_max'){
+                thresh <- median(periodic_maxs)
+            }else if (threshold == 'p95'){
+                thresh <- quantile(periodic_maxs, .95)
+            }else if (threshold == 'p99'){
+                thresh <- quantile(periodic_maxs, .99)
+            }
+            # Remove any anoms below the threshold
+            anoms <- subset(anoms, anoms[[2]] >= thresh)
+        }
+        all_anoms <- rbind(all_anoms, anoms)
+        seasonal_plus_trend <- rbind(seasonal_plus_trend, data_decomp)
     }
 
     # Cleanup potential duplicates
@@ -355,60 +355,60 @@ AnomalyDetectionTs <- function(x, max_anoms = 0.10, alpha = 0.05,
         return(NULL)
     }
 
-    return(anoms)
+    return(list(anoms=anoms, trendline=seasonal_plus_trend))
 }
 format_timestamp <- function(indf, index = 1) {
-  if (class(indf[[index]])[1] == "POSIXlt") {
+    if (class(indf[[index]])[1] == "POSIXlt") {
+        return(indf)
+    }
+    if (stringr::str_detect(indf[[index]][1], "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} \\+\\d{4}$")) {
+        indf[[index]] <- strptime(indf[[index]], format="%Y-%m-%d %H:%M:%S", tz="UTC")
+    }
+    else if (stringr::str_detect(indf[[index]][1], "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$")) {
+        indf[[index]] <- strptime(indf[[index]], format="%Y-%m-%d %H:%M:%S", tz="UTC")
+    }
+    else if (stringr::str_detect(indf[[index]][1], "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$")) {
+        indf[[index]] <- strptime(indf[[index]], format="%Y-%m-%d %H:%M", tz="UTC")
+    }
+    else if (stringr::str_detect(indf[[index]][1], "^\\d{2}/\\d{2}/\\d{2}$")) {
+        indf[[index]] <- strptime(indf[[index]], format="%m/%d/%y", tz="UTC")
+    }
+    else if (stringr::str_detect(indf[[index]][1], "^\\d{2}/\\d{2}/\\d{4}$")) {
+        indf[[index]] <- strptime(indf[[index]], format="%m/%d/%Y", tz="UTC")
+    }
+    else if (stringr::str_detect(indf[[index]][1], "^\\d{4}\\d{2}\\d{2}$")) {
+        indf[[index]] <- strptime(indf[[index]], format="%Y%m%d", tz="UTC")
+    }
+    else if (stringr::str_detect(indf[[index]][1], "^\\d{4}/\\d{2}/\\d{2}/\\d{2}$")) {
+        indf[[index]] <- strptime(indf[[index]], format="%Y/%m/%d/%H", tz="UTC")
+    }
+    else if (stringr::str_detect(indf[[index]][1], "^\\d{10}$")) {
+        # Handle Unix seconds in milliseconds
+        indf[[index]] <- as.POSIXlt(indf[[index]], origin="1970-01-01", tz="UTC")
+    }
+
     return(indf)
-  }
-  if (stringr::str_detect(indf[[index]][1], "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} \\+\\d{4}$")) {
-    indf[[index]] <- strptime(indf[[index]], format="%Y-%m-%d %H:%M:%S", tz="UTC")
-  }
-  else if (stringr::str_detect(indf[[index]][1], "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$")) {
-    indf[[index]] <- strptime(indf[[index]], format="%Y-%m-%d %H:%M:%S", tz="UTC")
-  }
-  else if (stringr::str_detect(indf[[index]][1], "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$")) {
-    indf[[index]] <- strptime(indf[[index]], format="%Y-%m-%d %H:%M", tz="UTC")
-  }
-  else if (stringr::str_detect(indf[[index]][1], "^\\d{2}/\\d{2}/\\d{2}$")) {
-    indf[[index]] <- strptime(indf[[index]], format="%m/%d/%y", tz="UTC")
-  }
-  else if (stringr::str_detect(indf[[index]][1], "^\\d{2}/\\d{2}/\\d{4}$")) {
-    indf[[index]] <- strptime(indf[[index]], format="%m/%d/%Y", tz="UTC")
-  }
-  else if (stringr::str_detect(indf[[index]][1], "^\\d{4}\\d{2}\\d{2}$")) {
-    indf[[index]] <- strptime(indf[[index]], format="%Y%m%d", tz="UTC")
-  }
-  else if (stringr::str_detect(indf[[index]][1], "^\\d{4}/\\d{2}/\\d{2}/\\d{2}$")) {
-    indf[[index]] <- strptime(indf[[index]], format="%Y/%m/%d/%H", tz="UTC")
-  }
-  else if (stringr::str_detect(indf[[index]][1], "^\\d{10}$")) {
-    # Handle Unix seconds in milliseconds
-    indf[[index]] <- as.POSIXlt(indf[[index]], origin="1970-01-01", tz="UTC")
-  }
-  
-  return(indf)
 }
 
 get_gran = function(tsdf, index=1) {
-  n = length(tsdf[[index]])
-  # We calculate the granularity from the time difference between the last 2 entries (sorted)
-  gran = round(difftime(max(tsdf[[index]]), sort(tsdf[[index]], partial = n-1)[n-1], 
-                        units = "secs"))
-  
-  if (gran >= 86400) {
-    return("day")
-  }
-  else if (gran >= 3600) {
-    return("hr")
-  }
-  else if (gran >= 60) {
-    return("min")
-  }
-  else if (gran >= 1) {
-    return("sec")
-  }
-  else {
-    return("ms")
-  }
+    n = length(tsdf[[index]])
+    # We calculate the granularity from the time difference between the last 2 entries (sorted)
+    gran = round(difftime(max(tsdf[[index]]), sort(tsdf[[index]], partial = n-1)[n-1], 
+                          units = "secs"))
+
+    if (gran >= 86400) {
+        return("day")
+    }
+    else if (gran >= 3600) {
+        return("hr")
+    }
+    else if (gran >= 60) {
+        return("min")
+    }
+    else if (gran >= 1) {
+        return("sec")
+    }
+    else {
+        return("ms")
+    }
 }
